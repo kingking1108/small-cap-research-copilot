@@ -68,13 +68,15 @@ ruff check .
 
 ## Status / roadmap
 
-This is the scaffold — retrieval, agent graph, tools, CLI, and eval harness
-are wired end-to-end, but need real content to be useful:
+Retrieval, agent graph, tools, CLI, and eval harness are wired end-to-end and
+verified against real filings for 3 of 5 watchlist companies (Amadeus Fire,
+Nagarro, Hypoport): 100% faithfulness, 100% correctness on 9 answerable
+golden-set questions, correct refusal on 3 deliberately unanswerable ones.
 
-- [ ] Pick a watchlist (5-8 issuers) and drop their filings into `data/raw/`
-- [ ] Replace the placeholder rows in `eval/golden_set.jsonl` with real
-      questions, including a few that are deliberately unanswerable from the
-      filings (to test refusal behaviour, not just recall)
+- [x] Pick a watchlist and drop filings into `data/raw/` (3/5 done — Süss
+      MicroTec and Deutsche Beteiligungs AG still missing)
+- [x] Populate `eval/golden_set.jsonl` with real, verified questions,
+      including deliberately unanswerable ones to test refusal behaviour
 - [ ] Wire `ResearchReport` (`src/research_copilot/report/schema.py`) into a
       final graph node via `llm.with_structured_output(...)` for structured,
       citation-checked report output
