@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     ovh_chat_base_url: str
     ovh_chat_model: str = "gpt-oss-120b"
     ovh_embeddings_base_url: str
-    ovh_embeddings_model: str = "bge-base-en-v1.5"
+    ovh_embeddings_model: str = "Qwen3-Embedding-8B"
 
     watchlist_dir: str = "data/raw"
     chroma_persist_dir: str = "data/processed/chroma"
