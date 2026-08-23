@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import typer
@@ -36,7 +37,14 @@ def ask(question: str) -> None:
 
 @app.command(name="eval")
 def run_eval() -> None:
-    """Run the evaluation suite against the golden question set."""
+    """Run the evaluation suite against the golden question set.
+
+    `eval/` lives at the project root (not inside the installed package)
+    since it's a human-edited dataset, not library code — add the cwd to
+    sys.path so it's importable when invoked as the installed console
+    script. Run this command from the project root.
+    """
+    sys.path.insert(0, str(Path.cwd()))
     from eval.run_eval import main as run_eval_main
 
     run_eval_main()
