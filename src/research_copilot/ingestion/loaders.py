@@ -11,6 +11,10 @@ def load_pdf(path: Path) -> Document:
     watchlist PDFs accordingly, e.g. `data/raw/example_ag.pdf`.
     """
     reader = PdfReader(str(path))
+    if reader.is_encrypted:
+        # Corporate report PDFs are often owner-password-protected (restricts
+        # copy/print) but readable with an empty user password.
+        reader.decrypt("")
     text = "\n".join(page.extract_text() or "" for page in reader.pages)
     return Document(page_content=text, metadata={"source": path.name, "company": path.stem})
 

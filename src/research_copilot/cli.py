@@ -8,14 +8,16 @@ from research_copilot.agent.graph import build_agent_graph
 from research_copilot.config import get_settings
 from research_copilot.ingestion.chunking import chunk_documents
 from research_copilot.ingestion.loaders import load_watchlist
-from research_copilot.retrieval.vectorstore import add_documents
+from research_copilot.retrieval.vectorstore import add_documents, reset_vectorstore
 
 app = typer.Typer(help="Small-Cap Research Copilot CLI")
 
 
 @app.command()
 def ingest() -> None:
-    """Parse and embed every PDF in the watchlist directory into the vector store."""
+    """Parse and embed every PDF in the watchlist directory into the vector
+    store. Always a clean full rebuild — re-running it after adding new PDFs
+    does not duplicate the ones already ingested."""
     settings = get_settings()
     raw_dir = Path(settings.watchlist_dir)
     documents = load_watchlist(raw_dir)
@@ -23,6 +25,7 @@ def ingest() -> None:
         typer.echo(f"No PDFs found in {raw_dir}. Add filings there first.")
         raise typer.Exit(code=1)
     chunks = chunk_documents(documents)
+    reset_vectorstore()
     add_documents(chunks)
     typer.echo(f"Ingested {len(documents)} document(s) as {len(chunks)} chunks.")
 

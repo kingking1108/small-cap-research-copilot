@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 
 from langchain_chroma import Chroma
@@ -15,6 +16,13 @@ def get_vectorstore() -> Chroma:
         embedding_function=get_embeddings(),
         persist_directory=settings.chroma_persist_dir,
     )
+
+
+def reset_vectorstore() -> None:
+    """Wipe the persisted collection so `ingest` is a clean full rebuild
+    instead of appending duplicate chunks on every re-run."""
+    settings = get_settings()
+    shutil.rmtree(settings.chroma_persist_dir, ignore_errors=True)
 
 
 def add_documents(documents: list[Document]) -> None:
