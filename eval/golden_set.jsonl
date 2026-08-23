@@ -1,0 +1,2 @@
+{"question": "What was <Company>'s revenue in the most recent fiscal year?", "expected_source": "<company_filename>.pdf", "notes": "Placeholder — replace with real questions once filings are ingested (Day 6)."}
+{"question": "Does <Company> mention any convertible bond issuance in its latest report?", "expected_source": "<company_filename>.pdf", "notes": "Placeholder — aim for a mix of answerable and deliberately unanswerable questions to test refusal behaviour."}
