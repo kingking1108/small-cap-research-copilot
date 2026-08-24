@@ -225,4 +225,4 @@ all.
 
 ## License
 
-MIT — add a `LICENSE` file before publishing if you want this explicit.
+[MIT](LICENSE)

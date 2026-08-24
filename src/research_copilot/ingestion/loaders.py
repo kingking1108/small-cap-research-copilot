@@ -24,7 +24,8 @@ def load_pdf(path: Path) -> Document:
     # NFC here so every downstream string comparison against this source
     # name just works.
     source = unicodedata.normalize("NFC", path.name)
-    return Document(page_content=text, metadata={"source": source, "company": path.stem})
+    company = unicodedata.normalize("NFC", path.stem)
+    return Document(page_content=text, metadata={"source": source, "company": company})
 
 
 def load_watchlist(raw_dir: Path) -> list[Document]:
