@@ -1,9 +1,9 @@
 # Small-Cap Research Copilot
 
-An agentic RAG assistant for researching European small- and mid-cap equities
-and convertible bonds. It answers analyst questions grounded in ingested
-filings, can pull live price data, and cites its sources — with an automated
-evaluation suite that scores answer faithfulness instead of relying on manual
+An agentic RAG assistant for researching European small- and mid-cap
+equities. It answers analyst questions grounded in ingested filings, can
+pull live price data, and cites its sources — with an automated evaluation
+suite that scores answer faithfulness instead of relying on manual
 spot-checks.
 
 ## Why this project
@@ -97,6 +97,14 @@ than silently passed through.
 pytest --cov=src
 ruff check .
 ```
+
+18 unit tests, 71% line coverage. Pure logic (chunking, ticker resolution,
+citation verification, Unicode normalization, the `MAX_TOOL_CALLS`
+enforcement) is unit-tested with mocked LLMs where needed; end-to-end
+correctness (does the agent actually answer real questions right) is
+covered separately by `research-copilot eval` against real filings rather
+than by unit tests, since that's a property of the live retrieval index
+and hosted model, not of any single function.
 
 ## Status / roadmap
 
