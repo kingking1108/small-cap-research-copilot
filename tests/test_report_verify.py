@@ -4,8 +4,8 @@ from research_copilot.report.schema import ResearchReport, SourcedClaim
 from research_copilot.report.verify import find_unverified_claims
 
 
-def _tool_message(source: str, text: str = "some retrieved text") -> ToolMessage:
-    return ToolMessage(content=f"[Source: {source}]\n{text}", tool_call_id="1")
+def _tool_message(source: str, page: int = 1, text: str = "some retrieved text") -> ToolMessage:
+    return ToolMessage(content=f"[Source: {source}, S. {page}]\n{text}", tool_call_id="1")
 
 
 def test_find_unverified_claims_flags_source_never_retrieved() -> None:
@@ -13,8 +13,8 @@ def test_find_unverified_claims_flags_source_never_retrieved() -> None:
         company="Example AG",
         summary="...",
         key_facts=[
-            SourcedClaim(claim="Revenue was 100 EUR", source="example_ag_2025.pdf"),
-            SourcedClaim(claim="Made up fact", source="a_document_never_seen.pdf"),
+            SourcedClaim(claim="Revenue was 100 EUR", source="example_ag_2025.pdf", page=1),
+            SourcedClaim(claim="Made up fact", source="a_document_never_seen.pdf", page=1),
         ],
     )
     messages = [_tool_message("example_ag_2025.pdf")]
@@ -29,9 +29,9 @@ def test_find_unverified_claims_accepts_all_when_sources_match() -> None:
     report = ResearchReport(
         company="Example AG",
         summary="...",
-        key_facts=[SourcedClaim(claim="Revenue was 100 EUR", source="example_ag_2025.pdf")],
+        key_facts=[SourcedClaim(claim="Revenue was 100 EUR", source="example_ag_2025.pdf", page=1)],
     )
-    messages = [_tool_message("example_ag_2025.pdf")]
+    messages = [_tool_message("example_ag_2025.pdf", page=1)]
 
     assert find_unverified_claims(report, messages) == []
 
@@ -40,7 +40,34 @@ def test_find_unverified_claims_flags_everything_if_no_tools_were_called() -> No
     report = ResearchReport(
         company="Example AG",
         summary="...",
-        key_facts=[SourcedClaim(claim="Revenue was 100 EUR", source="example_ag_2025.pdf")],
+        key_facts=[SourcedClaim(claim="Revenue was 100 EUR", source="example_ag_2025.pdf", page=1)],
     )
 
     assert len(find_unverified_claims(report, messages=[])) == 1
+
+
+def test_find_unverified_claims_flags_wrong_page_of_a_seen_document() -> None:
+    report = ResearchReport(
+        company="Example AG",
+        summary="...",
+        key_facts=[
+            SourcedClaim(claim="Revenue was 100 EUR", source="example_ag_2025.pdf", page=99)
+        ],
+    )
+    messages = [_tool_message("example_ag_2025.pdf", page=1)]
+
+    unverified = find_unverified_claims(report, messages)
+
+    assert len(unverified) == 1
+    assert unverified[0].claim == "Revenue was 100 EUR"
+
+
+def test_find_unverified_claims_accepts_claim_without_page() -> None:
+    report = ResearchReport(
+        company="Example AG",
+        summary="...",
+        key_facts=[SourcedClaim(claim="Revenue was 100 EUR", source="example_ag_2025.pdf")],
+    )
+    messages = [_tool_message("example_ag_2025.pdf", page=1)]
+
+    assert find_unverified_claims(report, messages) == []

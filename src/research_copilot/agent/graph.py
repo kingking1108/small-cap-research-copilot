@@ -34,8 +34,10 @@ SYSTEM_PROMPT = (
 REPORT_PROMPT = (
     "Based on the preceding conversation, write a structured research "
     "report. Every entry in key_facts must be a specific, verifiable claim "
-    "with the exact source document filename it came from, taken only from "
-    "the tool results above — never invent a fact or a source. Do not add "
+    "with the exact source document filename and page number it came from, "
+    "copied verbatim from the `[Source: <Dateiname>, S. <Seite>]` tag in the "
+    "tool result that supports it — taken only from the tool results above, "
+    "never invent a fact, source, or page. Do not add "
     "claims, context, or inferences that are not explicitly stated in the "
     "conversation above (e.g. do not guess an industry or sector from the "
     "company's name). List anything the conversation could not establish "

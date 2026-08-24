@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 class SourcedClaim(BaseModel):
     claim: str
     source: str
+    page: int | None = None
 
 
 class ResearchReport(BaseModel):

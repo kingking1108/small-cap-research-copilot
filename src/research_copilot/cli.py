@@ -30,9 +30,7 @@ def ingest() -> None:
     reset_vectorstore()
     add_documents(chunks)
     pdf_count = len({doc.metadata["source"] for doc in documents})
-    typer.echo(
-        f"Ingested {pdf_count} PDF(s) ({len(documents)} pages) as {len(chunks)} chunks."
-    )
+    typer.echo(f"Ingested {pdf_count} PDF(s) ({len(documents)} pages) as {len(chunks)} chunks.")
 
 
 @app.command()
@@ -73,7 +71,8 @@ def report(topic: str) -> None:
     if research_report.key_facts:
         typer.echo("\n## Key Facts")
         for fact in research_report.key_facts:
-            typer.echo(f"- {fact.claim} (Source: {fact.source})")
+            page = f", S. {fact.page}" if fact.page is not None else ""
+            typer.echo(f"- {fact.claim} (Quelle: {fact.source}{page})")
     if research_report.open_questions:
         typer.echo("\n## Open Questions")
         for question in research_report.open_questions:
@@ -81,9 +80,13 @@ def report(topic: str) -> None:
 
     unverified = find_unverified_claims(research_report, result["messages"])
     if unverified:
-        typer.echo("\n[WARNING] Claims citing a source the agent never actually retrieved:")
+        typer.echo(
+            "\n[WARNING] Claims citing a source (or page of a source) the agent "
+            "never actually retrieved:"
+        )
         for claim in unverified:
-            typer.echo(f"  - {claim.claim!r} -> cited source {claim.source!r}")
+            page = f", S. {claim.page}" if claim.page is not None else ""
+            typer.echo(f"  - {claim.claim!r} -> cited source {claim.source!r}{page}")
 
 
 @app.command(name="eval")
