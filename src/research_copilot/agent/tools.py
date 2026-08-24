@@ -55,7 +55,9 @@ def search_filings(query: str, company: str | None = None) -> str:
     if not docs:
         return "No matching passages found in the ingested documents."
     return "\n\n---\n\n".join(
-        f"[Source: {doc.metadata.get('source', 'unknown')}]\n{doc.page_content}" for doc in docs
+        f"[Source: {doc.metadata.get('source', 'unknown')}, "
+        f"S. {doc.metadata.get('page', '?')}]\n{doc.page_content}"
+        for doc in docs
     )
 
 

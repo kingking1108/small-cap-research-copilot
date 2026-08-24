@@ -5,18 +5,18 @@ from langchain_core.documents import Document
 from pypdf import PdfReader
 
 
-def load_pdf(path: Path) -> Document:
-    """Extract raw text from a single PDF filing into a Document.
+def load_pdf(path: Path) -> list[Document]:
+    """Extract raw text from a single PDF filing into one Document per page.
 
-    Filename (without extension) is used as the company identifier — name
-    watchlist PDFs accordingly, e.g. `data/raw/example_ag.pdf`.
+    `metadata["page"]` is 1-indexed to match how a human would cite "page 12"
+    of a PDF. Filename (without extension) is used as the company identifier
+    — name watchlist PDFs accordingly, e.g. `data/raw/example_ag.pdf`.
     """
     reader = PdfReader(str(path))
     if reader.is_encrypted:
         # Corporate report PDFs are often owner-password-protected (restricts
         # copy/print) but readable with an empty user password.
         reader.decrypt("")
-    text = "\n".join(page.extract_text() or "" for page in reader.pages)
     # macOS normalizes filenames with umlauts to NFD (decomposed: "a" +
     # combining diaeresis) at the filesystem level, while text typed
     # elsewhere (e.g. eval/golden_set.jsonl) defaults to NFC (precomposed
@@ -25,8 +25,14 @@ def load_pdf(path: Path) -> Document:
     # name just works.
     source = unicodedata.normalize("NFC", path.name)
     company = unicodedata.normalize("NFC", path.stem)
-    return Document(page_content=text, metadata={"source": source, "company": company})
+    return [
+        Document(
+            page_content=page.extract_text() or "",
+            metadata={"source": source, "company": company, "page": page_number},
+        )
+        for page_number, page in enumerate(reader.pages, start=1)
+    ]
 
 
 def load_watchlist(raw_dir: Path) -> list[Document]:
-    return [load_pdf(path) for path in sorted(raw_dir.glob("*.pdf"))]
+    return [page_doc for path in sorted(raw_dir.glob("*.pdf")) for page_doc in load_pdf(path)]
