@@ -1,8 +1,10 @@
 import re
+import unicodedata
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from research_copilot.llm import get_chat_model
+from research_copilot.retrieval.vectorstore import get_vectorstore
 
 # Models often format large numbers with different separators than the
 # source text (e.g. gpt-oss-120b uses U+202F narrow no-break space instead
@@ -46,3 +48,24 @@ def contains_expected(answer: str, expected_substrings: list[str]) -> bool:
         _SEPARATORS.sub("", substring.lower()) in normalized_answer
         for substring in expected_substrings
     )
+
+
+def retrieval_rank(question: str, expected_source: str, search_k: int = 20) -> int | None:
+    """1-indexed rank of the first chunk from `expected_source` among the
+    top `search_k` results for `question`, searched directly against the
+    vector store (not through the agent) - isolates retrieval quality from
+    the agent's query reformulation and tool-use behaviour. Returns None if
+    no chunk from that source appears within `search_k` at all.
+
+    This is the same manual check that traced the DBAG hallucination to a
+    rank-#11 miss (see README), generalized into something the eval suite
+    runs automatically for every golden-set question instead of only on
+    suspicion of a specific failure.
+    """
+    expected_normalized = unicodedata.normalize("NFC", expected_source)
+    docs = get_vectorstore().similarity_search(question, k=search_k)
+    for rank, doc in enumerate(docs, start=1):
+        source = unicodedata.normalize("NFC", doc.metadata.get("source", ""))
+        if source == expected_normalized:
+            return rank
+    return None

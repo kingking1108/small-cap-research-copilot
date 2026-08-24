@@ -48,7 +48,8 @@ grounding-based eval loop that turns "looks right" into a measured number.
   prose, then checks every cited source against what was actually retrieved.
 - **Evaluation**: a golden question set graded by an LLM-as-judge
   faithfulness check — does the answer only claim what the retrieved sources
-  support (`eval/`).
+  support — plus a retrieval hit@k check that queries the vector store
+  directly, decoupled from the agent's own query reformulation (`eval/`).
 - **Tracing (optional)**: [Langfuse](https://langfuse.com) via LangChain's
   callback interface — every agent step, tool call, and LLM call is traced
   with timing, prompts, and token usage when configured (see below).
@@ -101,9 +102,9 @@ ruff check .
 
 Retrieval, agent graph, tools, CLI, and eval harness are wired end-to-end and
 verified against real filings for all 5 watchlist companies (Amadeus Fire,
-Nagarro, Hypoport, SUSS MicroTec, Deutsche Beteiligungs AG): 100% correctness
-and 100% average faithfulness across 13 answerable golden-set questions,
-correct refusal on 3 deliberately unanswerable ones.
+Nagarro, Hypoport, SUSS MicroTec, Deutsche Beteiligungs AG): 100% correctness,
+100% retrieval hit@12, and ~99% average faithfulness across 13 answerable
+golden-set questions, correct refusal on 3 deliberately unanswerable ones.
 
 - [x] Pick a watchlist (5 issuers) and drop filings into `data/raw/`
 - [x] Populate `eval/golden_set.jsonl` with real, verified questions,
@@ -112,7 +113,9 @@ correct refusal on 3 deliberately unanswerable ones.
 - [x] Wire `ResearchReport` into a final graph node
       (`build_report_graph` in `agent/graph.py`) with citation checking
       against the agent's actual tool outputs (`report/verify.py`)
-- [ ] Track retrieval precision@k alongside faithfulness in `eval/metrics.py`
+- [x] Track retrieval precision alongside faithfulness in `eval/metrics.py`
+      (`retrieval_rank` / hit@k, decoupled from agent query reformulation —
+      see below for a bug this surfaced on its first real run)
 
 ## A hallucination, diagnosed and fixed
 
@@ -182,6 +185,43 @@ Catching this class of error needs sentence-level entailment checking
 faithfulness judge already approximates for `ask`/`eval` — extending the
 same idea to `report`'s per-claim citations would close this gap, and is
 the more precise version of the citation-verification idea above.
+
+## A retrieval metric that caught a bug in itself
+
+Adding `retrieval_rank`/hit@k (measures whether the expected source ranks
+within the top-k results for a question, searched directly against the
+vector store rather than through the agent — see `eval/metrics.py`) was
+meant to generalize the manual rank-checking done during the DBAG
+investigation above into something the eval suite runs automatically. Its
+first real run reported **2 misses, both DBAG questions, rank "not in top
+20"** — even though the exact same questions were answered correctly with
+faithfulness 1.00 moments earlier. That contradiction was the signal
+something was wrong with the metric, not the retrieval.
+
+Root cause: macOS normalizes filenames containing umlauts to **NFD**
+(decomposed — "a" + a separate combining diaeresis codepoint) at the
+filesystem level. The `expected_source` strings typed into
+`eval/golden_set.jsonl` are plain **NFC** (precomposed "ä") — the standard
+form for typed text. `"...Geschäftsbericht...".pdf` from the two forms
+looks character-for-character identical printed to a terminal, but
+`==` between them is `False`, since the underlying codepoints differ. Every
+DBAG chunk's `source` metadata (only DBAG's filename contains an umlaut)
+silently failed every exact-match comparison, regardless of actual rank.
+
+Fixed by normalizing to NFC once, at the point filenames enter the system
+(`ingestion/loaders.py::load_pdf`), plus defensively at the two comparison
+sites that existed before this fix was in place
+(`eval/metrics.py::retrieval_rank`, `report/verify.py::find_unverified_claims`)
+so a differently-normalized string from any future source (LLM output,
+a new data source) doesn't silently reintroduce the same failure. Required
+a full re-ingest to rebuild the persisted Chroma metadata; verified after:
+retrieval hit@12 100% (13/13), no change to correctness or faithfulness.
+
+The pattern worth remembering: a new metric reporting numbers that
+contradict other signals you already trust is itself useful information —
+here, the contradiction (correct answer + "source unreachable") was the
+fastest route to finding a bug that had nothing to do with retrieval at
+all.
 
 ## License
 
