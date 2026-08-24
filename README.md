@@ -28,9 +28,11 @@ grounding-based eval loop that turns "looks right" into a measured number.
           (`ask`)          output + citation check, `report`)
 ```
 
-- **LLM & embeddings**: [OVHcloud AI Endpoints](https://www.ovhcloud.com/en/public-cloud/ai-endpoints/catalog/)
-  (`gpt-oss-120b` for reasoning/tool-use, BGE for embeddings), accessed through
-  an OpenAI-compatible API via `langchain-openai`.
+- **LLM & embeddings**: any OpenAI-compatible API via `langchain-openai`.
+  Currently configured for [OVHcloud AI Endpoints](https://www.ovhcloud.com/en/public-cloud/ai-endpoints/catalog/)
+  (`gpt-oss-120b` for reasoning/tool-use, BGE for embeddings), but OpenAI,
+  Azure OpenAI, Groq, or a local Ollama/vLLM server work the same way -
+  just point `LLM_CHAT_BASE_URL`/`LLM_EMBEDDINGS_BASE_URL` elsewhere.
 - **Orchestration**: [LangGraph](https://langchain-ai.github.io/langgraph/) —
   an explicit state graph (`agent` ⇄ `tools`) rather than a black-box chain,
   so routing and tool dispatch are inspectable and testable.
@@ -59,7 +61,7 @@ grounding-based eval loop that turns "looks right" into a measured number.
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-cp .env.example .env  # fill in your OVHcloud API key + endpoint URLs
+cp .env.example .env  # fill in your LLM provider's API key + endpoint URLs
 ```
 
 Add a few company filings (PDFs) to `data/raw/`, named after the company,

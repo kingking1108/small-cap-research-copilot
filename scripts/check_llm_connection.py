@@ -1,9 +1,9 @@
-"""Smoke test for OVHcloud AI Endpoints connectivity.
+"""Smoke test for the configured LLM/embeddings endpoint connectivity.
 
 Run this before `research-copilot ingest`/`ask` to catch config or auth
 issues in isolation, without spinning up the full agent graph.
 
-    python scripts/check_ovh_connection.py
+    python scripts/check_llm_connection.py
 """
 
 from research_copilot.llm import get_chat_model

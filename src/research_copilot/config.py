@@ -6,18 +6,20 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Runtime configuration, loaded from environment variables / .env.
 
-    OVHcloud AI Endpoints assigns each model its own base URL. Copy the exact
-    values from the "Documentation" tab of the model you picked in the catalog:
-    https://www.ovhcloud.com/en/public-cloud/ai-endpoints/catalog/
+    Chat and embeddings each point at an OpenAI-compatible API - this works
+    with OVHcloud AI Endpoints (https://www.ovhcloud.com/en/public-cloud/ai-endpoints/catalog/),
+    OpenAI itself, Azure OpenAI, Groq, Together, Mistral, OpenRouter, a local
+    Ollama/vLLM/llama.cpp server, or anything else speaking the same API -
+    just point the base URL/model at whichever provider you're using.
     """
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    ovh_api_key: str
-    ovh_chat_base_url: str
-    ovh_chat_model: str = "gpt-oss-120b"
-    ovh_embeddings_base_url: str
-    ovh_embeddings_model: str = "Qwen3-Embedding-8B"
+    llm_api_key: str
+    llm_chat_base_url: str
+    llm_chat_model: str = "gpt-oss-120b"
+    llm_embeddings_base_url: str
+    llm_embeddings_model: str = "Qwen3-Embedding-8B"
 
     watchlist_dir: str = "data/raw"
     chroma_persist_dir: str = "data/processed/chroma"
