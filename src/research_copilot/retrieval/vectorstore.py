@@ -27,3 +27,15 @@ def reset_vectorstore() -> None:
 
 def add_documents(documents: list[Document]) -> None:
     get_vectorstore().add_documents(documents)
+
+
+def get_known_companies() -> list[str]:
+    """Distinct `company` metadata values actually present in the collection.
+
+    `company` is the ingested PDF's filename stem (see `ingestion/loaders.py`),
+    not a clean company name, so callers that want to filter by company need
+    this to resolve free-text input to a value Chroma's exact-match `filter`
+    will actually hit.
+    """
+    result = get_vectorstore().get(include=["metadatas"])
+    return sorted({m["company"] for m in result["metadatas"] if m and "company" in m})

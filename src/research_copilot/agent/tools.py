@@ -2,16 +2,56 @@ import yfinance as yf
 from langchain_core.tools import tool
 
 from research_copilot.config import get_settings
-from research_copilot.retrieval.vectorstore import get_vectorstore
+from research_copilot.retrieval.vectorstore import get_known_companies, get_vectorstore
+
+# `company` metadata is a raw filename stem (e.g. "Annual_report_nagarro_2025_de"),
+# not a clean name, so an LLM-supplied name like "SUSS MicroTec" or "Deutsche
+# Beteiligungs" won't substring-match the stem directly. These hints give the
+# resolver a fragment that is actually present in the corresponding filename.
+COMPANY_NAME_HINTS: dict[str, str] = {
+    "nagarro": "nagarro",
+    "amadeus fire": "amadeus",
+    "hypoport": "hypoport",
+    "suss microtec": "suss",
+    "süss microtec": "suss",
+    "deutsche beteiligungs": "dbag",
+    "dbag": "dbag",
+}
+
+
+def _resolve_company(company: str, known_companies: list[str]) -> str | None:
+    normalized = company.strip().lower()
+    if not normalized or not known_companies:
+        return None
+    for known in known_companies:
+        known_lower = known.lower()
+        if normalized in known_lower or known_lower in normalized:
+            return known
+    for name, hint in COMPANY_NAME_HINTS.items():
+        if name in normalized:
+            for known in known_companies:
+                if hint in known.lower():
+                    return known
+    return None
 
 
 @tool
-def search_filings(query: str) -> str:
+def search_filings(query: str, company: str | None = None) -> str:
     """Search ingested company filings and reports for passages relevant to
     the query. Returns the top matching excerpts, each tagged with its
-    source document so answers can be cited."""
+    source document so answers can be cited. Optionally pass `company` (a
+    company name, e.g. 'Nagarro' or 'DBAG') to scope the search to that one
+    company's filings and avoid results from other companies in the corpus."""
     settings = get_settings()
-    docs = get_vectorstore().similarity_search(query, k=settings.retrieval_k)
+    vectorstore = get_vectorstore()
+    company_filter = None
+    if company:
+        resolved = _resolve_company(company, get_known_companies())
+        # Unresolved name: fall back to an unfiltered search rather than
+        # applying a filter guaranteed to match nothing.
+        if resolved is not None:
+            company_filter = {"company": resolved}
+    docs = vectorstore.similarity_search(query, k=settings.retrieval_k, filter=company_filter)
     if not docs:
         return "No matching passages found in the ingested documents."
     return "\n\n---\n\n".join(
