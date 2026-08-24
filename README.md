@@ -22,8 +22,10 @@ grounding-based eval loop that turns "looks right" into a measured number.
                  │  (gpt-oss)  │──▶ get_stock_price ──▶ Yahoo Finance
                  └─────────────┘
                         │
-                        ▼
-                  cited answer
+              ┌─────────┴─────────┐
+              ▼                   ▼
+         cited answer     generate_report (structured
+          (`ask`)          output + citation check, `report`)
 ```
 
 - **LLM & embeddings**: [OVHcloud AI Endpoints](https://www.ovhcloud.com/en/public-cloud/ai-endpoints/catalog/)
@@ -36,6 +38,10 @@ grounding-based eval loop that turns "looks right" into a measured number.
   embedded, and stored in a local Chroma vector store.
 - **Tools**: `search_filings` (RAG lookup) and `get_stock_price` (Yahoo
   Finance via `yfinance`).
+- **Structured reports**: `research-copilot report` routes the same
+  agent/tools loop through a final `generate_report` node
+  (`llm.with_structured_output(ResearchReport)`) instead of ending on plain
+  prose, then checks every cited source against what was actually retrieved.
 - **Evaluation**: a golden question set graded by an LLM-as-judge
   faithfulness check — does the answer only claim what the retrieved sources
   support (`eval/`).
@@ -68,8 +74,17 @@ run without tracing; nothing else changes.
 ```bash
 research-copilot ingest              # chunk + embed everything in data/raw/
 research-copilot ask "What did Example AG report as FY revenue?"
+research-copilot report "Example AG"  # structured, citation-checked ResearchReport
 research-copilot eval                # score answers against eval/golden_set.jsonl
 ```
+
+`report` runs the same agent/retrieval loop as `ask`, but ends in a
+validated `ResearchReport` (`report/schema.py`: summary, cited key facts,
+open questions) instead of free-text prose. Every key fact's source is
+checked against what the agent actually retrieved
+(`report/verify.py::find_unverified_claims`) — a claim citing a document
+the agent never saw gets flagged as a `[WARNING]` in the CLI output rather
+than silently passed through.
 
 ## Testing
 
@@ -90,9 +105,9 @@ correct refusal on 3 deliberately unanswerable ones.
 - [x] Populate `eval/golden_set.jsonl` with real, verified questions,
       including deliberately unanswerable ones to test refusal behaviour
 - [x] Diagnose and fix a reproducible hallucination (see below)
-- [ ] Wire `ResearchReport` (`src/research_copilot/report/schema.py`) into a
-      final graph node via `llm.with_structured_output(...)` for structured,
-      citation-checked report output
+- [x] Wire `ResearchReport` into a final graph node
+      (`build_report_graph` in `agent/graph.py`) with citation checking
+      against the agent's actual tool outputs (`report/verify.py`)
 - [ ] Track retrieval precision@k alongside faithfulness in `eval/metrics.py`
 
 ## A hallucination, diagnosed and fixed

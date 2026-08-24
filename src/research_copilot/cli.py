@@ -4,11 +4,12 @@ from pathlib import Path
 import typer
 from langchain_core.messages import HumanMessage
 
-from research_copilot.agent.graph import build_agent_graph
+from research_copilot.agent.graph import build_agent_graph, build_report_graph
 from research_copilot.config import get_settings
 from research_copilot.ingestion.chunking import chunk_documents
 from research_copilot.ingestion.loaders import load_watchlist
 from research_copilot.observability import get_langfuse_handler
+from research_copilot.report.verify import find_unverified_claims
 from research_copilot.retrieval.vectorstore import add_documents, reset_vectorstore
 
 app = typer.Typer(help="Small-Cap Research Copilot CLI")
@@ -42,6 +43,44 @@ def ask(question: str) -> None:
     config = {"callbacks": [handler], "run_name": question} if handler else {}
     result = agent.invoke({"messages": [HumanMessage(content=question)]}, config=config)
     typer.echo(result["messages"][-1].content)
+
+
+@app.command()
+def report(topic: str) -> None:
+    """Generate a structured, citation-checked research report on a topic
+    (e.g. a company name). Same agent/retrieval loop as `ask`, but ends in
+    a validated ResearchReport instead of free-text prose.
+
+    Traced in Langfuse if LANGFUSE_PUBLIC_KEY/SECRET_KEY are set in .env.
+    """
+    graph = build_report_graph()
+    handler = get_langfuse_handler()
+    run_name = f"report: {topic}"
+    config = {"callbacks": [handler], "run_name": run_name} if handler else {}
+    prompt = f"Erstelle einen Research-Report zu: {topic}"
+    result = graph.invoke({"messages": [HumanMessage(content=prompt)]}, config=config)
+
+    research_report = result.get("report")
+    if research_report is None:
+        typer.echo("Could not generate a structured report.")
+        raise typer.Exit(code=1)
+
+    typer.echo(f"# {research_report.company}\n")
+    typer.echo(research_report.summary)
+    if research_report.key_facts:
+        typer.echo("\n## Key Facts")
+        for fact in research_report.key_facts:
+            typer.echo(f"- {fact.claim} (Source: {fact.source})")
+    if research_report.open_questions:
+        typer.echo("\n## Open Questions")
+        for question in research_report.open_questions:
+            typer.echo(f"- {question}")
+
+    unverified = find_unverified_claims(research_report, result["messages"])
+    if unverified:
+        typer.echo("\n[WARNING] Claims citing a source the agent never actually retrieved:")
+        for claim in unverified:
+            typer.echo(f"  - {claim.claim!r} -> cited source {claim.source!r}")
 
 
 @app.command(name="eval")
