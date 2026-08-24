@@ -83,49 +83,67 @@ ruff check .
 Retrieval, agent graph, tools, CLI, and eval harness are wired end-to-end and
 verified against real filings for all 5 watchlist companies (Amadeus Fire,
 Nagarro, Hypoport, SUSS MicroTec, Deutsche Beteiligungs AG): 100% correctness
-and 96% average faithfulness across 13 answerable golden-set questions,
+and 100% average faithfulness across 13 answerable golden-set questions,
 correct refusal on 3 deliberately unanswerable ones.
 
 - [x] Pick a watchlist (5 issuers) and drop filings into `data/raw/`
 - [x] Populate `eval/golden_set.jsonl` with real, verified questions,
       including deliberately unanswerable ones to test refusal behaviour
+- [x] Diagnose and fix a reproducible hallucination (see below)
 - [ ] Wire `ResearchReport` (`src/research_copilot/report/schema.py`) into a
       final graph node via `llm.with_structured_output(...)` for structured,
       citation-checked report output
 - [ ] Track retrieval precision@k alongside faithfulness in `eval/metrics.py`
 
-## Known limitations
+## A hallucination, diagnosed and fixed
 
 **The hosted model is not fully deterministic even at `temperature=0`.**
-Re-running the exact same golden-set question ("What was DBAG's 2025 group
-result?") three times produced three different behaviours:
+Re-running the exact same question ("What was DBAG's 2025 group result?")
+repeatedly produced different behaviours across runs: a correct, cited
+answer; a correct answer after 4 retried searches; and once a **fabricated
+number** (223,018,243.04 €) attributed to a citation that, on inspection,
+didn't contain that figure anywhere. A later real user session hit the same
+question and the agent looped through 11 search rounds before answering —
+same underlying issue, worse symptom.
 
-1. A correct, cited answer (24,698 thousand €) — but the retrieved chunks
-   that specific run actually used didn't clearly contain that figure, so
-   the faithfulness judge correctly scored it low (0.40) despite the number
-   being right. Correct ≠ grounded, and this is exactly why the eval harness
-   tracks both metrics separately rather than just checking the final answer.
-2. A **fabricated number** (223,018,243.04 €) attributed to a citation that,
-   on inspection, doesn't contain that figure anywhere — a genuine
-   hallucination with a fake-looking source reference.
-3. A correct, well-grounded answer after retrying the search 4 times (past
-   the "stop after 2 attempts" guardrail in the system prompt, which the
-   model doesn't reliably follow).
+**Investigation, in order:**
 
-Root cause: the first couple of retrieval queries for "Konzernergebnis" kept
-matching boilerplate audit-opinion text instead of the actual results table,
-and the model's behaviour when a search comes up empty is inconsistent —
-sometimes it persists, sometimes it fabricates a plausible-looking number
-instead of retrying or admitting it doesn't know.
+1. Added a system-prompt instruction capping retries at 2 attempts. Didn't
+   hold reliably — the 11-round session happened *after* this was in place,
+   confirming prompt-level limits are a suggestion, not a guarantee.
+2. Replaced it with a hard limit enforced in code
+   (`agent/graph.py::MAX_TOOL_CALLS`): after 3 tool calls, the model is
+   invoked *without* tools bound, so it structurally cannot call another one
+   and must produce a final answer. This reliably capped every run at ≤3
+   tool calls — but repeated testing showed the exact same fabricated
+   number reappearing. The round-limit fixed cost/latency, not correctness;
+   forcing a conclusion after failed searches can make fabrication *more*
+   likely, not less.
+3. Traced the fabrication to its source: `similarity_search_with_score`
+   showed the chunk containing the real figure (24,698 thousand €) ranked
+   **#11** for the natural-language query "Deutsche Beteiligungs AG
+   Konzernergebnis 2025" — generic audit-opinion boilerplate (which
+   literally repeats the word "Konzernergebnis") out-scored the actual
+   results table at the default `retrieval_k=5`. The agent's searches
+   weren't failing at reasoning; retrieval just never handed it the right
+   text.
+4. Raised `retrieval_k` from 5 to 12 (see `config.py`) to cover that rank.
+   Verified with 5 repeated runs of the same question (5/5 correct,
+   1-3 tool calls each, no more 11-round loops) and a full golden-set
+   regression (100% correctness, 100% faithfulness, no regressions
+   elsewhere) — runtime per `eval` run increased from ~1:15 to ~3:07 due to
+   more context per search call, an accepted trade-off for reliability.
 
-This wasn't caught by manual spot-checking earlier in the project — it only
-surfaced because the eval suite runs the same questions repeatedly and
-tracks faithfulness independently of correctness. A production system would
-need either self-consistency sampling (run N times, flag disagreement),
-stricter citation verification (reject numeric claims that don't literally
-appear in the retrieved chunks), or a stronger base model — not attempted
-here to keep the project scope basic, but a natural next step and a good
-discussion point on evaluation methodology.
+The lesson that generalizes: a hallucination that *looks* like a reasoning
+or prompt-adherence failure was actually a retrieval-ranking failure one
+layer down, and no amount of prompt engineering on the agent would have
+fixed it — only measuring where the correct chunk actually ranked did. Two
+things this doesn't fully close out: `retrieval_k=12` was tuned against one
+observed case, not a systematic sweep, and nothing here stops a *different*
+query from having its answer ranked below #12. A more general fix — quantified
+retrieval precision@k in the eval suite, or citation verification that
+rejects numeric claims not literally present in the retrieved text — remains
+a natural next step and is called out above.
 
 ## License
 

@@ -24,7 +24,11 @@ class Settings(BaseSettings):
 
     chunk_size: int = 1000
     chunk_overlap: int = 150
-    retrieval_k: int = 5
+    # Empirically tuned: for one golden-set case the chunk containing the
+    # actual figure only ranked #11 against a natural-language query (generic
+    # boilerplate like audit opinions out-scored it at k=5). Higher k costs
+    # more tokens per search, but a miss here means a wrong/fabricated answer.
+    retrieval_k: int = 12
 
     # Optional: agent tracing via https://cloud.langfuse.com (or self-hosted).
     # Leave unset to run without tracing - nothing else depends on these.
