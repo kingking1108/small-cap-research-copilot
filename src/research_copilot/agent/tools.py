@@ -50,12 +50,16 @@ def get_stock_price(ticker: str) -> str:
     just the company name (e.g. 'Nagarro') for watchlist companies, whose
     correct ticker is looked up automatically rather than guessed."""
     resolved = _resolve_ticker(ticker)
+    source = f"Yahoo Finance ({resolved})"
     history = yf.Ticker(resolved).history(period="5d")
     if history.empty:
-        return f"No price data found for ticker '{resolved}'."
+        return f"[Source: {source}]\nNo price data found for ticker '{resolved}'."
     latest = history["Close"].iloc[-1]
     change_pct = (history["Close"].iloc[-1] / history["Close"].iloc[0] - 1) * 100
-    return f"{resolved}: last close {latest:.2f}, 5-day change {change_pct:+.2f}%"
+    return (
+        f"[Source: {source}]\n"
+        f"{resolved}: last close {latest:.2f}, 5-day change {change_pct:+.2f}%"
+    )
 
 
 TOOLS = [search_filings, get_stock_price]

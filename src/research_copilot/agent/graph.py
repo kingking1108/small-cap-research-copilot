@@ -10,6 +10,12 @@ from research_copilot.agent.tools import TOOLS
 from research_copilot.llm import get_chat_model
 from research_copilot.report.schema import ResearchReport
 
+LANGUAGE_INSTRUCTION = (
+    "Always answer in German (Deutsch), regardless of the language the "
+    "question was asked in. Company names, tickers, and direct quotes from "
+    "source documents may stay in their original language."
+)
+
 SYSTEM_PROMPT = (
     "You are a financial research assistant for European small- and mid-cap "
     "equities. Answer only using facts you can support with the "
@@ -18,7 +24,8 @@ SYSTEM_PROMPT = (
     "relevant information after at most two attempts, stop searching and "
     "tell the user the information is not available in the ingested "
     "documents — do not keep retrying with reworded queries. Never guess or "
-    "state a fact you cannot support with a tool result."
+    "state a fact you cannot support with a tool result. "
+    f"{LANGUAGE_INSTRUCTION}"
 )
 
 REPORT_PROMPT = (
@@ -29,7 +36,9 @@ REPORT_PROMPT = (
     "claims, context, or inferences that are not explicitly stated in the "
     "conversation above (e.g. do not guess an industry or sector from the "
     "company's name). List anything the conversation could not establish "
-    "under open_questions instead of guessing."
+    "under open_questions instead of guessing. "
+    f"{LANGUAGE_INSTRUCTION} This applies to the summary, key_facts claims, "
+    "and open_questions fields alike."
 )
 
 # The system prompt above asks the model to stop after ~2 searches, but that
@@ -59,7 +68,7 @@ def _build_call_model() -> Callable[[AgentState], dict]:
                         "You have reached the search limit. Answer now using only "
                         "what you already found, or state clearly that the "
                         "information is not available in the ingested documents. "
-                        "Do not call any more tools."
+                        f"Do not call any more tools. {LANGUAGE_INSTRUCTION}"
                     )
                 ),
             ]
