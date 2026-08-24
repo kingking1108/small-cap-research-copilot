@@ -29,7 +29,10 @@ def ingest() -> None:
     chunks = chunk_documents(documents)
     reset_vectorstore()
     add_documents(chunks)
-    typer.echo(f"Ingested {len(documents)} document(s) as {len(chunks)} chunks.")
+    pdf_count = len({doc.metadata["source"] for doc in documents})
+    typer.echo(
+        f"Ingested {pdf_count} PDF(s) ({len(documents)} pages) as {len(chunks)} chunks."
+    )
 
 
 @app.command()
