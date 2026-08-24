@@ -5,6 +5,7 @@ from langchain_core.messages import HumanMessage, ToolMessage
 
 from eval.metrics import contains_expected, faithfulness_score
 from research_copilot.agent.graph import build_agent_graph
+from research_copilot.observability import get_langfuse_handler
 
 GOLDEN_SET_PATH = Path(__file__).parent / "golden_set.jsonl"
 
@@ -27,6 +28,7 @@ def extract_tool_sources(messages: list) -> str:
 def main() -> None:
     agent = build_agent_graph()
     cases = load_golden_set()
+    handler = get_langfuse_handler()
 
     faithfulness_scores: list[float] = []
     correctness_results: list[bool] = []
@@ -35,7 +37,10 @@ def main() -> None:
         question = case["question"]
         answerable = case.get("answerable", True)
 
-        result = agent.invoke({"messages": [HumanMessage(content=question)]})
+        config = (
+            {"callbacks": [handler], "run_name": question, "tags": ["eval"]} if handler else {}
+        )
+        result = agent.invoke({"messages": [HumanMessage(content=question)]}, config=config)
         answer = str(result["messages"][-1].content)
         sources = extract_tool_sources(result["messages"])
 

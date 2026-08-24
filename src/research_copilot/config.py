@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     chunk_overlap: int = 150
     retrieval_k: int = 5
 
+    # Optional: agent tracing via https://cloud.langfuse.com (or self-hosted).
+    # Leave unset to run without tracing - nothing else depends on these.
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
+    langfuse_host: str = "https://cloud.langfuse.com"
+
 
 @lru_cache
 def get_settings() -> Settings:

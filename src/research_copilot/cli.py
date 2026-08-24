@@ -8,6 +8,7 @@ from research_copilot.agent.graph import build_agent_graph
 from research_copilot.config import get_settings
 from research_copilot.ingestion.chunking import chunk_documents
 from research_copilot.ingestion.loaders import load_watchlist
+from research_copilot.observability import get_langfuse_handler
 from research_copilot.retrieval.vectorstore import add_documents, reset_vectorstore
 
 app = typer.Typer(help="Small-Cap Research Copilot CLI")
@@ -32,9 +33,14 @@ def ingest() -> None:
 
 @app.command()
 def ask(question: str) -> None:
-    """Ask the research agent a question and print its answer."""
+    """Ask the research agent a question and print its answer.
+
+    Traced in Langfuse if LANGFUSE_PUBLIC_KEY/SECRET_KEY are set in .env.
+    """
     agent = build_agent_graph()
-    result = agent.invoke({"messages": [HumanMessage(content=question)]})
+    handler = get_langfuse_handler()
+    config = {"callbacks": [handler], "run_name": question} if handler else {}
+    result = agent.invoke({"messages": [HumanMessage(content=question)]}, config=config)
     typer.echo(result["messages"][-1].content)
 
 

@@ -39,6 +39,9 @@ grounding-based eval loop that turns "looks right" into a measured number.
 - **Evaluation**: a golden question set graded by an LLM-as-judge
   faithfulness check — does the answer only claim what the retrieved sources
   support (`eval/`).
+- **Tracing (optional)**: [Langfuse](https://langfuse.com) via LangChain's
+  callback interface — every agent step, tool call, and LLM call is traced
+  with timing, prompts, and token usage when configured (see below).
 
 ## Setup
 
@@ -50,6 +53,15 @@ cp .env.example .env  # fill in your OVHcloud API key + endpoint URLs
 
 Add a few company filings (PDFs) to `data/raw/`, named after the company,
 e.g. `data/raw/example_ag.pdf`.
+
+**Optional — tracing with Langfuse:** sign up at
+[cloud.langfuse.com](https://cloud.langfuse.com) (free tier) or self-host,
+create a project, and copy its Public/Secret key into `.env`
+(`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`). `research-copilot ask` and
+`research-copilot eval` then send every agent run to Langfuse automatically —
+open the project's Traces view to see each tool call, retrieved chunk, and
+LLM call in order, with latency and token counts. Leave both keys blank to
+run without tracing; nothing else changes.
 
 ## Usage
 
