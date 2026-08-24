@@ -29,6 +29,16 @@ class SourcedClaim(BaseModel):
     def _clean_source(cls, value: str) -> str:
         return _strip_source_wrapper(value)
 
+    @field_validator("page")
+    @classmethod
+    def _clean_page(cls, value: int | None) -> int | None:
+        # Pages are 1-indexed (see ingestion/loaders.py); the model sometimes
+        # writes 0 for a source whose tag never carries a page at all (e.g.
+        # get_stock_price's `[Source: Yahoo Finance (...)]`) instead of
+        # leaving the field unset - normalize away rather than let a
+        # non-existent "S. 0" reach report output or the verifier.
+        return None if value is not None and value < 1 else value
+
 
 class ResearchReport(BaseModel):
     """Structured, citation-checked report output for `research-copilot
