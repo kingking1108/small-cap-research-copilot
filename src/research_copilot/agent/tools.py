@@ -87,10 +87,14 @@ def _resolve_ticker(query: str) -> str:
 
 @tool
 def get_stock_price(ticker: str) -> str:
-    """Get the latest closing price and 5-day change (%) for a stock. Pass
-    either a Yahoo Finance ticker with exchange suffix (e.g. 'SAP.DE') or
-    just the company name (e.g. 'Nagarro') for watchlist companies, whose
-    correct ticker is looked up automatically rather than guessed."""
+    """Get the latest closing price and 5-day change (%) for a stock. For
+    any of the watchlist companies (Nagarro, Amadeus Fire, Hypoport, SUSS
+    MicroTec, Deutsche Beteiligungs/DBAG), always pass the company name
+    itself (e.g. 'Nagarro') - never guess a ticker for them yourself, your
+    own guesses for these are unreliable (their real Yahoo Finance tickers
+    use non-obvious suffixes) and the correct one is looked up
+    automatically from the name. Only pass a literal ticker with exchange
+    suffix (e.g. 'SAP.DE') for a company outside the watchlist."""
     resolved = _resolve_ticker(ticker)
     source = f"Yahoo Finance ({resolved})"
     history = yf.Ticker(resolved).history(period="5d")

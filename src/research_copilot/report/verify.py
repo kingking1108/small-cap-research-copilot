@@ -5,7 +5,12 @@ from langchain_core.messages import ToolMessage
 
 from research_copilot.report.schema import ResearchReport, SourcedClaim
 
-_SOURCE_TAG = re.compile(r"\[Source: ([^,\]]+), S\. (\d+)\]")
+# search_filings tags its excerpts `[Source: file.pdf, S. 12]`, but
+# get_stock_price's tag has no page at all - `[Source: Yahoo Finance
+# (NA9.DE)]` - so the page group must be optional, not just its digits
+# optional, or every stock-price citation would silently vanish from
+# known_sources and get flagged as unverified regardless of correctness.
+_SOURCE_TAG = re.compile(r"\[Source: ([^,\]]+)(?:, S\. (\d+))?\]")
 
 
 def _normalize(text: str) -> str:
@@ -15,15 +20,16 @@ def _normalize(text: str) -> str:
     return unicodedata.normalize("NFC", text)
 
 
-def known_sources(messages: list) -> set[tuple[str, int]]:
-    """Every (filename, page) pair the agent's tool calls actually surfaced
-    in this conversation, extracted from the `[Source: ..., S. ...]` tags
-    search_filings attaches to each retrieved chunk (see agent/tools.py)."""
-    pairs: set[tuple[str, int]] = set()
+def known_sources(messages: list) -> set[tuple[str, int | None]]:
+    """Every (source, page) pair the agent's tool calls actually surfaced in
+    this conversation, extracted from each tool result's `[Source: ...]`
+    tag (see agent/tools.py). `page` is None for tools whose tag never
+    carries one (e.g. get_stock_price)."""
+    pairs: set[tuple[str, int | None]] = set()
     for message in messages:
         if isinstance(message, ToolMessage):
             for source, page in _SOURCE_TAG.findall(str(message.content)):
-                pairs.add((_normalize(source), int(page)))
+                pairs.add((_normalize(source), int(page) if page else None))
     return pairs
 
 
