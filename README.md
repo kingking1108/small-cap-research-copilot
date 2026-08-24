@@ -38,7 +38,7 @@ grounding-based eval loop that turns "looks right" into a measured number.
   embedded, and stored in a local Chroma vector store.
 - **Tools**: `search_filings` (RAG lookup) and `get_stock_price` (Yahoo
   Finance via `yfinance`). `get_stock_price` resolves watchlist company
-  names to their correct ticker itself (`agent/tools.py::WATCHLIST_TICKERS`)
+  names to their correct ticker itself (`agent/tools.py::WATCHLIST`)
   rather than trusting the model's guess — it reliably invented plausible
   but wrong European exchange suffixes (e.g. "NGR.DE" for Nagarro; the real
   ticker is "NA9.DE").

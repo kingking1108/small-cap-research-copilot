@@ -1,4 +1,5 @@
 import shutil
+from functools import lru_cache
 from pathlib import Path
 
 from langchain_chroma import Chroma
@@ -23,12 +24,15 @@ def reset_vectorstore() -> None:
     instead of appending duplicate chunks on every re-run."""
     settings = get_settings()
     shutil.rmtree(settings.chroma_persist_dir, ignore_errors=True)
+    get_known_companies.cache_clear()
 
 
 def add_documents(documents: list[Document]) -> None:
     get_vectorstore().add_documents(documents)
+    get_known_companies.cache_clear()
 
 
+@lru_cache
 def get_known_companies() -> list[str]:
     """Distinct `company` metadata values actually present in the collection.
 
@@ -36,6 +40,12 @@ def get_known_companies() -> list[str]:
     not a clean company name, so callers that want to filter by company need
     this to resolve free-text input to a value Chroma's exact-match `filter`
     will actually hit.
+
+    Cached: this is a full-collection metadata scan, and every company-scoped
+    `search_filings` call was re-running it from scratch. Ingestion
+    (`add_documents`/`reset_vectorstore`) explicitly invalidates the cache
+    since those are the only operations that change the result within a
+    process's lifetime.
     """
     result = get_vectorstore().get(include=["metadatas"])
     return sorted({m["company"] for m in result["metadatas"] if m and "company" in m})

@@ -59,7 +59,15 @@ def report(topic: str) -> None:
     run_name = f"report: {topic}"
     config = {"callbacks": [handler], "run_name": run_name} if handler else {}
     prompt = f"Erstelle einen Research-Report zu: {topic}"
-    result = graph.invoke({"messages": [HumanMessage(content=prompt)]}, config=config)
+    try:
+        result = graph.invoke({"messages": [HumanMessage(content=prompt)]}, config=config)
+    except Exception as exc:
+        # The hosted model is not fully deterministic (see README) and can
+        # return output that fails ResearchReport's structured-output
+        # validation; fail gracefully like `ingest` does instead of an
+        # unhandled traceback.
+        typer.echo(f"Report generation failed: {exc}")
+        raise typer.Exit(code=1) from exc
 
     research_report = result.get("report")
     if research_report is None:

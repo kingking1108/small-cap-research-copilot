@@ -16,7 +16,10 @@ def _reset_settings_cache():
     silently see a stale cached Settings built by an earlier test, and its
     own env change would leak into whichever test runs next."""
     from research_copilot.config import get_settings
+    from research_copilot.retrieval.vectorstore import get_known_companies
 
     get_settings.cache_clear()
+    get_known_companies.cache_clear()
     yield
     get_settings.cache_clear()
+    get_known_companies.cache_clear()

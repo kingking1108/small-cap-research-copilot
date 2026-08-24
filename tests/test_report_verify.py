@@ -14,6 +14,12 @@ def _pageless_tool_message(source: str, text: str = "some retrieved text") -> To
     return ToolMessage(content=f"[Source: {source}]\n{text}", tool_call_id="1")
 
 
+def _unknown_page_tool_message(source: str, text: str = "some retrieved text") -> ToolMessage:
+    # search_filings emits a literal "S. ?" (not an absent page clause) when
+    # a retrieved chunk lacks page metadata.
+    return ToolMessage(content=f"[Source: {source}, S. ?]\n{text}", tool_call_id="1")
+
+
 def test_find_unverified_claims_flags_source_never_retrieved() -> None:
     report = ResearchReport(
         company="Example AG",
@@ -88,6 +94,17 @@ def test_find_unverified_claims_accepts_pageless_source_like_stock_price() -> No
         ],
     )
     messages = [_pageless_tool_message("Yahoo Finance (NA9.DE)")]
+
+    assert find_unverified_claims(report, messages) == []
+
+
+def test_find_unverified_claims_accepts_source_with_unknown_page_tag() -> None:
+    report = ResearchReport(
+        company="Example AG",
+        summary="...",
+        key_facts=[SourcedClaim(claim="Revenue was 100 EUR", source="example_ag_2025.pdf")],
+    )
+    messages = [_unknown_page_tool_message("example_ag_2025.pdf")]
 
     assert find_unverified_claims(report, messages) == []
 

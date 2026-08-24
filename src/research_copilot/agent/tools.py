@@ -1,21 +1,37 @@
+from dataclasses import dataclass
+
 import yfinance as yf
 from langchain_core.tools import tool
 
 from research_copilot.config import get_settings
 from research_copilot.retrieval.vectorstore import get_known_companies, get_vectorstore
 
-# `company` metadata is a raw filename stem (e.g. "Annual_report_nagarro_2025_de"),
-# not a clean name, so an LLM-supplied name like "SUSS MicroTec" or "Deutsche
-# Beteiligungs" won't substring-match the stem directly. These hints give the
-# resolver a fragment that is actually present in the corresponding filename.
-COMPANY_NAME_HINTS: dict[str, str] = {
-    "nagarro": "nagarro",
-    "amadeus fire": "amadeus",
-    "hypoport": "hypoport",
-    "suss microtec": "suss",
-    "süss microtec": "suss",
-    "deutsche beteiligungs": "dbag",
-    "dbag": "dbag",
+
+@dataclass(frozen=True)
+class WatchlistCompany:
+    # A fragment actually present in the ingested PDF's filename stem (e.g.
+    # "Annual_report_nagarro_2025_de"), since an LLM-supplied name like
+    # "SUSS MicroTec" or "Deutsche Beteiligungs" won't substring-match the
+    # stem directly.
+    filename_hint: str
+    # LLMs reliably guess the wrong Yahoo Finance suffix for European
+    # small/mid caps (e.g. "NGR.DE" for Nagarro, which doesn't exist - the
+    # real ticker is "NA9.DE"), so it's looked up here instead of trusted.
+    ticker: str
+
+
+# Single source of truth for watchlist companies, keyed by every name/spelling
+# an LLM might use to refer to them. Kept as one table (rather than separate
+# name->hint and name->ticker dicts) so adding a company can't update one
+# lookup and silently forget the other.
+WATCHLIST: dict[str, WatchlistCompany] = {
+    "nagarro": WatchlistCompany(filename_hint="nagarro", ticker="NA9.DE"),
+    "amadeus fire": WatchlistCompany(filename_hint="amadeus", ticker="AAD.DE"),
+    "hypoport": WatchlistCompany(filename_hint="hypoport", ticker="HYQ.DE"),
+    "suss microtec": WatchlistCompany(filename_hint="suss", ticker="SMHN.DE"),
+    "süss microtec": WatchlistCompany(filename_hint="suss", ticker="SMHN.DE"),
+    "deutsche beteiligungs": WatchlistCompany(filename_hint="dbag", ticker="DBAN.DE"),
+    "dbag": WatchlistCompany(filename_hint="dbag", ticker="DBAN.DE"),
 }
 
 
@@ -27,10 +43,10 @@ def _resolve_company(company: str, known_companies: list[str]) -> str | None:
         known_lower = known.lower()
         if normalized in known_lower or known_lower in normalized:
             return known
-    for name, hint in COMPANY_NAME_HINTS.items():
+    for name, entry in WATCHLIST.items():
         if name in normalized:
             for known in known_companies:
-                if hint in known.lower():
+                if entry.filename_hint in known.lower():
                     return known
     return None
 
@@ -61,27 +77,14 @@ def search_filings(query: str, company: str | None = None) -> str:
     )
 
 
-# LLMs reliably guess the wrong Yahoo Finance suffix for European small/mid
-# caps (e.g. "NGR.DE" for Nagarro, which doesn't exist - the real ticker is
-# "NA9.DE"). Resolve our watchlist companies by name instead of trusting the
-# model's ticker knowledge; anything outside the watchlist still falls
-# through to using the model's input as a literal ticker.
-WATCHLIST_TICKERS: dict[str, str] = {
-    "nagarro": "NA9.DE",
-    "amadeus fire": "AAD.DE",
-    "hypoport": "HYQ.DE",
-    "suss microtec": "SMHN.DE",
-    "süss microtec": "SMHN.DE",
-    "deutsche beteiligungs": "DBAN.DE",
-    "dbag": "DBAN.DE",
-}
-
-
 def _resolve_ticker(query: str) -> str:
+    # Resolve our watchlist companies by name instead of trusting the
+    # model's ticker knowledge; anything outside the watchlist still falls
+    # through to using the model's input as a literal ticker.
     normalized = query.strip().lower()
-    for name, ticker in WATCHLIST_TICKERS.items():
+    for name, entry in WATCHLIST.items():
         if name in normalized:
-            return ticker
+            return entry.ticker
     return query
 
 

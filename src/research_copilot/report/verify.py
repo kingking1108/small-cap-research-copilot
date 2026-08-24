@@ -10,7 +10,12 @@ from research_copilot.report.schema import ResearchReport, SourcedClaim
 # (NA9.DE)]` - so the page group must be optional, not just its digits
 # optional, or every stock-price citation would silently vanish from
 # known_sources and get flagged as unverified regardless of correctness.
-_SOURCE_TAG = re.compile(r"\[Source: ([^,\]]+)(?:, S\. (\d+))?\]")
+# search_filings also emits `S. ?` (literal question mark, not absent) when
+# a retrieved chunk has no page metadata at all - the page alternative must
+# accept that too, or the whole tag fails to match (a comma-containing page
+# clause that isn't digits-only matches neither branch) and the source
+# silently drops out of known_sources.
+_SOURCE_TAG = re.compile(r"\[Source: ([^,\]]+)(?:, S\. (\d+|\?))?\]")
 
 
 def _normalize(text: str) -> str:
@@ -29,7 +34,7 @@ def known_sources(messages: list) -> set[tuple[str, int | None]]:
     for message in messages:
         if isinstance(message, ToolMessage):
             for source, page in _SOURCE_TAG.findall(str(message.content)):
-                pairs.add((_normalize(source), int(page) if page else None))
+                pairs.add((_normalize(source), int(page) if page.isdigit() else None))
     return pairs
 
 
