@@ -1,8 +1,24 @@
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
+from langchain_core.documents import Document
 
-from research_copilot.agent.tools import get_stock_price
+from research_copilot.agent.tools import get_stock_price, search_filings
+
+
+@patch("research_copilot.agent.tools.get_vectorstore")
+def test_search_filings_includes_page_number_in_source_tag(mock_get_vectorstore: MagicMock) -> None:
+    mock_get_vectorstore.return_value.similarity_search.return_value = [
+        Document(
+            page_content="Umsatz stieg um 10%.",
+            metadata={"source": "report.pdf", "page": 12},
+        ),
+    ]
+
+    result = search_filings.invoke({"query": "Umsatz"})
+
+    assert "report.pdf" in result
+    assert "12" in result
 
 
 @patch("research_copilot.agent.tools.yf.Ticker")

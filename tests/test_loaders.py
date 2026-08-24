@@ -6,9 +6,10 @@ from pypdf import PdfWriter
 from research_copilot.ingestion.loaders import load_pdf, load_watchlist
 
 
-def _write_blank_pdf(path: Path) -> None:
+def _write_blank_pdf(path: Path, num_pages: int = 1) -> None:
     writer = PdfWriter()
-    writer.add_blank_page(width=200, height=200)
+    for _ in range(num_pages):
+        writer.add_blank_page(width=200, height=200)
     with path.open("wb") as f:
         writer.write(f)
 
@@ -21,10 +22,22 @@ def test_load_pdf_normalizes_source_to_nfc(tmp_path: Path) -> None:
     pdf_path = tmp_path / nfd_name
     _write_blank_pdf(pdf_path)
 
-    doc = load_pdf(pdf_path)
+    docs = load_pdf(pdf_path)
 
-    assert doc.metadata["source"] == nfc_name
-    assert doc.metadata["company"] == Path(nfc_name).stem
+    assert len(docs) == 1
+    assert docs[0].metadata["source"] == nfc_name
+    assert docs[0].metadata["company"] == Path(nfc_name).stem
+    assert docs[0].metadata["page"] == 1
+
+
+def test_load_pdf_returns_one_document_per_page(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "multi_page.pdf"
+    _write_blank_pdf(pdf_path, num_pages=3)
+
+    docs = load_pdf(pdf_path)
+
+    assert [doc.metadata["page"] for doc in docs] == [1, 2, 3]
+    assert all(doc.metadata["source"] == "multi_page.pdf" for doc in docs)
 
 
 def test_load_watchlist_only_picks_up_pdfs(tmp_path: Path) -> None:
