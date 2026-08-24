@@ -37,7 +37,11 @@ grounding-based eval loop that turns "looks right" into a measured number.
 - **Retrieval**: PDF filings chunked with `RecursiveCharacterTextSplitter`,
   embedded, and stored in a local Chroma vector store.
 - **Tools**: `search_filings` (RAG lookup) and `get_stock_price` (Yahoo
-  Finance via `yfinance`).
+  Finance via `yfinance`). `get_stock_price` resolves watchlist company
+  names to their correct ticker itself (`agent/tools.py::WATCHLIST_TICKERS`)
+  rather than trusting the model's guess — it reliably invented plausible
+  but wrong European exchange suffixes (e.g. "NGR.DE" for Nagarro; the real
+  ticker is "NA9.DE").
 - **Structured reports**: `research-copilot report` routes the same
   agent/tools loop through a final `generate_report` node
   (`llm.with_structured_output(ResearchReport)`) instead of ending on plain
@@ -159,6 +163,25 @@ query from having its answer ranked below #12. A more general fix — quantified
 retrieval precision@k in the eval suite, or citation verification that
 rejects numeric claims not literally present in the retrieved text — remains
 a natural next step and is called out above.
+
+**A subtler variant surfaced afterward on a different unanswerable
+question** ("What's the conversion price of Nagarro's convertible bond?" —
+Nagarro doesn't have one). Across 4 runs, one produced "the report mentions
+the convertible bond but doesn't state a price" — a false claim about the
+document's *content*, not a fabricated number. The retrieved chunks (loan
+schedules, derivative financial instruments, stock option disclosures) are
+genuinely debt/equity-adjacent but never mention a convertible bond at all;
+the model occasionally conflates topical similarity with "this document
+covers that". Unlike the DBAG case, this isn't a retrieval-ranking problem
+— there's no correct chunk to rank higher, because the fact doesn't exist
+in the corpus. It's also not caught by `report/verify.py`'s citation check,
+which only verifies that a cited *filename* was actually retrieved, not
+that a claim's *content* is actually supported by what that source says.
+Catching this class of error needs sentence-level entailment checking
+(does source text X actually support claim Y), which `eval/metrics.py`'s
+faithfulness judge already approximates for `ask`/`eval` — extending the
+same idea to `report`'s per-claim citations would close this gap, and is
+the more precise version of the citation-verification idea above.
 
 ## License
 
