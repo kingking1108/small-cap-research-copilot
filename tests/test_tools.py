@@ -2,8 +2,14 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 from langchain_core.documents import Document
+from langchain_core.messages import ToolMessage
 
-from research_copilot.agent.tools import _resolve_company, get_stock_price, search_filings
+from research_copilot.agent.tools import (
+    _previously_seen_chunks,
+    _resolve_company,
+    get_stock_price,
+    search_filings,
+)
 
 
 @patch("research_copilot.agent.tools.get_vectorstore")
@@ -139,3 +145,60 @@ def test_search_filings_handles_no_matches(mock_get_vectorstore: MagicMock) -> N
     result = search_filings.invoke({"query": "nonexistent"})
 
     assert "No matching passages found" in result
+
+
+def test_previously_seen_chunks_recovers_content_without_tag() -> None:
+    tool_message = ToolMessage(
+        content=(
+            "[Source: f.pdf, S. 1]\nchunk A\n\n---\n\n[Source: f.pdf, S. 2]\nchunk B"
+        ),
+        tool_call_id="1",
+    )
+
+    seen = _previously_seen_chunks({"messages": [tool_message]})
+
+    assert seen == {"chunk A", "chunk B"}
+
+
+def test_previously_seen_chunks_ignores_non_tagged_content() -> None:
+    tool_message = ToolMessage(
+        content="No matching passages found in the ingested documents.",
+        tool_call_id="1",
+    )
+
+    assert _previously_seen_chunks({"messages": [tool_message]}) == set()
+
+
+@patch("research_copilot.agent.tools.get_vectorstore")
+def test_search_filings_dedups_chunks_already_seen_in_conversation(
+    mock_get_vectorstore: MagicMock,
+) -> None:
+    store = MagicMock()
+    store.similarity_search.return_value = [
+        Document(page_content="chunk A", metadata={"source": "f.pdf", "page": 1}),
+        Document(page_content="chunk B", metadata={"source": "f.pdf", "page": 2}),
+    ]
+    mock_get_vectorstore.return_value = store
+    prior = ToolMessage(content="[Source: f.pdf, S. 1]\nchunk A", tool_call_id="1")
+
+    result = search_filings.func(query="x", company=None, state={"messages": [prior]})
+
+    assert "chunk A" not in result
+    assert "chunk B" in result
+    store.similarity_search.assert_called_once_with("x", k=24, filter=None)
+
+
+@patch("research_copilot.agent.tools.get_vectorstore")
+def test_search_filings_reports_when_all_matches_already_seen(
+    mock_get_vectorstore: MagicMock,
+) -> None:
+    store = MagicMock()
+    store.similarity_search.return_value = [
+        Document(page_content="chunk A", metadata={"source": "f.pdf", "page": 1}),
+    ]
+    mock_get_vectorstore.return_value = store
+    prior = ToolMessage(content="[Source: f.pdf, S. 1]\nchunk A", tool_call_id="1")
+
+    result = search_filings.func(query="x", company=None, state={"messages": [prior]})
+
+    assert "already retrieved earlier in this conversation" in result

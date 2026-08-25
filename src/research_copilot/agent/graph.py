@@ -1,6 +1,6 @@
 from collections.abc import Callable
 
-from langchain_core.messages import SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, AnyMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -76,6 +76,46 @@ REPORT_PROMPT = (
 # answer from whatever was already retrieved.
 MAX_TOOL_CALLS = 3
 
+# Every ToolMessage stays in state forever (AgentState uses the add_messages
+# reducer) and gets resent in full on every subsequent model call. With
+# retrieval_k=12, a single search_filings result is ~12 chunks - so a
+# multi-round question resends every earlier round's full result set each
+# time, growing prompt size with the number of past searches instead of
+# staying flat. Chunks come back ranked, so the ones most likely to matter
+# are first; capping older (non-latest) tool results to their first few
+# chunks keeps that signal while shedding the long tail once the model has
+# moved on to a follow-up search.
+_MAX_STALE_TOOL_CHUNKS = 4
+_CHUNK_SEPARATOR = "\n\n---\n\n"
+
+
+def _trim_stale_tool_messages(messages: list[AnyMessage]) -> list[AnyMessage]:
+    """Return a copy of `messages` with every ToolMessage from a completed
+    round (i.e. not the most recent tool call round) capped to its first
+    `_MAX_STALE_TOOL_CHUNKS` chunks. Only affects what's sent to the LLM for
+    this call - `state["messages"]` itself is untouched, so citation
+    verification (`report/verify.py`) and report generation still see every
+    chunk the agent ever actually retrieved."""
+    last_ai_index = -1
+    for index, message in enumerate(messages):
+        if isinstance(message, AIMessage):
+            last_ai_index = index
+
+    trimmed = list(messages)
+    for index, message in enumerate(messages):
+        if index > last_ai_index or not isinstance(message, ToolMessage):
+            continue
+        chunks = str(message.content).split(_CHUNK_SEPARATOR)
+        if len(chunks) <= _MAX_STALE_TOOL_CHUNKS:
+            continue
+        omitted = len(chunks) - _MAX_STALE_TOOL_CHUNKS
+        new_content = _CHUNK_SEPARATOR.join(chunks[:_MAX_STALE_TOOL_CHUNKS]) + (
+            f"\n\n[... {omitted} weitere, niedriger gerankte Treffer aus dieser "
+            "früheren Suche ausgelassen ...]"
+        )
+        trimmed[index] = message.model_copy(update={"content": new_content})
+    return trimmed
+
 
 def _build_call_model() -> Callable[[AgentState], dict]:
     llm_with_tools = get_chat_model().bind_tools(TOOLS)
@@ -87,9 +127,10 @@ def _build_call_model() -> Callable[[AgentState], dict]:
             messages = [SystemMessage(content=SYSTEM_PROMPT), *messages]
 
         tool_call_count = sum(1 for m in messages if isinstance(m, ToolMessage))
+        llm_messages = _trim_stale_tool_messages(messages)
         if tool_call_count >= MAX_TOOL_CALLS:
-            messages = [
-                *messages,
+            llm_messages = [
+                *llm_messages,
                 SystemMessage(
                     content=(
                         "You have reached the search limit. Answer now using only "
@@ -99,9 +140,9 @@ def _build_call_model() -> Callable[[AgentState], dict]:
                     )
                 ),
             ]
-            return {"messages": [llm_without_tools.invoke(messages)]}
+            return {"messages": [llm_without_tools.invoke(llm_messages)]}
 
-        return {"messages": [llm_with_tools.invoke(messages)]}
+        return {"messages": [llm_with_tools.invoke(llm_messages)]}
 
     return call_model
 

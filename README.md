@@ -100,7 +100,7 @@ pytest --cov=src
 ruff check .
 ```
 
-18 unit tests, 71% line coverage. Pure logic (chunking, ticker resolution,
+55 unit tests, 82% line coverage. Pure logic (chunking, ticker resolution,
 citation verification, Unicode normalization, the `MAX_TOOL_CALLS`
 enforcement) is unit-tested with mocked LLMs where needed; end-to-end
 correctness (does the agent actually answer real questions right) is
@@ -232,6 +232,36 @@ contradict other signals you already trust is itself useful information —
 here, the contradiction (correct answer + "source unreachable") was the
 fastest route to finding a bug that had nothing to do with retrieval at
 all.
+
+## Cutting agent latency: quadratic context growth
+
+The hosted model's non-determinism (see above) makes wall-clock time an
+unreliable before/after signal, so this was measured with a deterministic
+token-count benchmark instead: real chunks from the real vector store,
+through a scripted (not model-decided) tool-call sequence.
+
+**Root cause:** `AgentState`'s `add_messages` reducer keeps every
+`ToolMessage` forever, and `agent/graph.py::call_model` resends the full
+history on each call. With `retrieval_k=12`, a 3-search-round question
+doesn't cost 3x one round's context, it costs 1x + 2x + 3x — confirmed on a
+real trace: 2,137 → 6,013 → 7,887 tokens for calls 2/3/4.
+
+- **Trim stale tool results** (`agent/graph.py::_trim_stale_tool_messages`):
+  caps every `ToolMessage` from a completed round to its top 4 (ranked)
+  chunks instead of all 12 before sending to the LLM; `state["messages"]`
+  itself stays untouched, so citation verification and reports still see
+  everything retrieved. Cut those same three calls to 5,195 / 5,147 / 5,226
+  tokens — **13.6% → 34.7% → 34.4%**, growing with round count as expected.
+- **Dedup repeated searches** (`agent/tools.py::search_filings`): via
+  LangGraph's `InjectedState` (invisible to the model), filters out chunks
+  already seen earlier in the conversation. On a realistic reworded-retry,
+  **8 of 12 chunks (67%) were exact duplicates without dedup, 0 of 12
+  with it** — less about token count, more about not wasting a retry
+  round on repeats.
+- **Tried and reverted:** restricting `generate_report` to just the
+  question + tool results (dropping the agent's own prose) measured only
+  **0.8%** savings, since tool payloads dominate the context. Not worth
+  the extra code path.
 
 ## License
 
