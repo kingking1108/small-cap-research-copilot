@@ -2,7 +2,9 @@ import sys
 from pathlib import Path
 
 import typer
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
+from langgraph.graph.state import CompiledStateGraph
+from rich.console import Console
 
 from research_copilot.agent.graph import build_agent_graph, build_report_graph
 from research_copilot.config import get_settings
@@ -13,6 +15,50 @@ from research_copilot.report.verify import find_unverified_claims
 from research_copilot.retrieval.vectorstore import add_documents, reset_vectorstore
 
 app = typer.Typer(help="Small-Cap Research Copilot CLI")
+
+
+def _tool_call_status(message: AIMessage) -> str:
+    call = message.tool_calls[0]
+    if call["name"] == "get_stock_price":
+        return f"Rufe Kursdaten ab: {call['args'].get('ticker', '')}..."
+    query = call["args"].get("query", "")
+    return f"Suche: {query}..." if query else "Suche in Filings..."
+
+
+def _run_with_status(
+    graph: CompiledStateGraph,
+    initial_state: dict,
+    config: dict,
+    final_step_label: str | None = None,
+) -> dict:
+    """Run the graph via `.stream()` instead of `.invoke()`, updating a
+    status line as each node finishes so a multi-round question (up to
+    MAX_TOOL_CALLS search rounds, each a real LLM/API round-trip) shows
+    what's actually happening instead of a blank prompt. `stream_mode`
+    defaults to "updates": each yielded item is `{node_name: node_output}`,
+    matching exactly the `{"messages": [...]}` / `{"report": ...}` dicts
+    the graph's own nodes return (agent/graph.py), so no full-state
+    resync is needed - just append/set as each node reports in."""
+    console = Console()
+    messages = list(initial_state.get("messages", []))
+    report = None
+    with console.status("Denke nach...") as status:
+        for update in graph.stream(initial_state, config=config, stream_mode="updates"):
+            for node_name, node_output in update.items():
+                if "messages" in node_output:
+                    messages.extend(node_output["messages"])
+                if "report" in node_output:
+                    report = node_output["report"]
+
+                if node_name == "agent":
+                    latest = node_output["messages"][-1]
+                    if latest.tool_calls:
+                        status.update(_tool_call_status(latest))
+                    elif final_step_label:
+                        status.update(final_step_label)
+                elif node_name == "tools":
+                    status.update("Werte Ergebnisse aus...")
+    return {"messages": messages, "report": report}
 
 
 @app.command()
@@ -42,7 +88,7 @@ def ask(question: str) -> None:
     agent = build_agent_graph()
     handler = get_langfuse_handler()
     config = {"callbacks": [handler], "run_name": question} if handler else {}
-    result = agent.invoke({"messages": [HumanMessage(content=question)]}, config=config)
+    result = _run_with_status(agent, {"messages": [HumanMessage(content=question)]}, config)
     typer.echo(result["messages"][-1].content)
 
 
@@ -60,7 +106,12 @@ def report(topic: str) -> None:
     config = {"callbacks": [handler], "run_name": run_name} if handler else {}
     prompt = f"Erstelle einen Research-Report zu: {topic}"
     try:
-        result = graph.invoke({"messages": [HumanMessage(content=prompt)]}, config=config)
+        result = _run_with_status(
+            graph,
+            {"messages": [HumanMessage(content=prompt)]},
+            config,
+            final_step_label="Erstelle strukturierten Report...",
+        )
     except Exception as exc:
         # The hosted model is not fully deterministic (see README) and can
         # return output that fails ResearchReport's structured-output
