@@ -93,22 +93,6 @@ checked against what the agent actually retrieved
 the agent never saw gets flagged as a `[WARNING]` in the CLI output rather
 than silently passed through.
 
-### Demo frontend
-
-```bash
-pip install -e ".[demo]"
-streamlit run app.py
-```
-
-A minimal Streamlit chat UI over the same two flows: **Frage stellen**
-(`ask`, conversational, cited) and **Report erstellen** (`report`,
-structured, citation-checked). Runs the graph via `.stream()` so a status
-widget shows each tool call as it happens ("Suche: ...", "Rufe Kursdaten
-ab: ...") instead of a blank spinner for however long a multi-round
-question takes. `app.py` is intentionally standalone — it duplicates the
-small amount of streaming/status glue also in `cli.py` rather than sharing
-a module, so the two entry points can't step on each other.
-
 ## Testing
 
 ```bash
