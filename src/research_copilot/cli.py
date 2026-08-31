@@ -5,6 +5,8 @@ import typer
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph.state import CompiledStateGraph
 from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
 
 from research_copilot.agent.graph import build_agent_graph, build_report_graph
 from research_copilot.config import get_settings
@@ -89,7 +91,7 @@ def ask(question: str) -> None:
     handler = get_langfuse_handler()
     config = {"callbacks": [handler], "run_name": question} if handler else {}
     result = _run_with_status(agent, {"messages": [HumanMessage(content=question)]}, config)
-    typer.echo(result["messages"][-1].content)
+    Console().print(Markdown(result["messages"][-1].content))
 
 
 @app.command()
@@ -125,27 +127,34 @@ def report(topic: str) -> None:
         typer.echo("Could not generate a structured report.")
         raise typer.Exit(code=1)
 
-    typer.echo(f"# {research_report.company}\n")
-    typer.echo(research_report.summary)
+    lines = [f"# {research_report.company}", "", research_report.summary]
     if research_report.key_facts:
-        typer.echo("\n## Key Facts")
+        lines.append("\n## Key Facts")
         for fact in research_report.key_facts:
             page = f", S. {fact.page}" if fact.page is not None else ""
-            typer.echo(f"- {fact.claim} (Quelle: {fact.source}{page})")
+            lines.append(f"- {fact.claim} (Quelle: {fact.source}{page})")
     if research_report.open_questions:
-        typer.echo("\n## Open Questions")
+        lines.append("\n## Open Questions")
         for question in research_report.open_questions:
-            typer.echo(f"- {question}")
+            lines.append(f"- {question}")
+
+    console = Console()
+    console.print(Markdown("\n".join(lines)))
 
     unverified = find_unverified_claims(research_report, result["messages"])
     if unverified:
-        typer.echo(
-            "\n[WARNING] Claims citing a source (or page of a source) the agent "
-            "never actually retrieved:"
-        )
+        warning_lines = []
         for claim in unverified:
             page = f", S. {claim.page}" if claim.page is not None else ""
-            typer.echo(f"  - {claim.claim!r} -> cited source {claim.source!r}{page}")
+            warning_lines.append(f"{claim.claim!r} -> cited source {claim.source!r}{page}")
+        console.print(
+            Panel(
+                "\n".join(warning_lines),
+                title="Unverified Claims",
+                subtitle="Claims citing a source (or page) the agent never actually retrieved",
+                border_style="yellow",
+            )
+        )
 
 
 @app.command(name="eval")
